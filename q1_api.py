@@ -1,7 +1,12 @@
 import numpy as np
 import random
-from matplotlib import pyplot as plt
+from silence_tensorflow import silence_tensorflow
+silence_tensorflow()
+import tensorflow as tf
 from scipy import stats
+from matplotlib import pyplot as plt
+from sklearn.model_selection import KFold
+
 
 # Distribution parameters
 C = 4
@@ -74,3 +79,28 @@ def optimal_pr_error(data, labels):
         d[n] = np.argmax(p[:, n])
     pr_error = np.count_nonzero([d[i] != labels[i] for i in range(N)]) / N
     return pr_error
+
+
+def evaluate_MLP(D_train, L_train, D_test, L_test, P):
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Dense(P, activation=tf.nn.relu))
+    model.add(tf.keras.layers.Dense(4, activation=tf.nn.softmax))
+
+    model.compile(optimizer='SGD', loss='categorical_crossentropy', metrics=[tf.keras.metrics.CategoricalAccuracy()])
+    model.fit(D_train, tf.keras.utils.to_categorical(L_train), batch_size=32, epochs=100, verbose=0)
+    loss, accuracy = model.evaluate(D_test, tf.keras.utils.to_categorical(L_test), batch_size=32, verbose=0)
+    pr_error = 1 - accuracy
+    return pr_error
+
+
+def cross_validate(D, L, K, P):
+    pr_error = []
+    kf = KFold(n_splits=K)
+    for train_index, test_index in kf.split(D):
+        D_train = np.array([D[i] for i in train_index])
+        L_train = np.array([L[i] for i in train_index])
+        D_test = np.array([D[i] for i in test_index])
+        L_test = np.array([L[i] for i in test_index])
+        pr_error.append(evaluate_MLP(D_train, L_train, D_test, L_test, P))
+    avg_pr_error = np.sum(pr_error) / K
+    return avg_pr_error
